@@ -1,6 +1,9 @@
 ##-----------------------------------------------------------------------------
 ## Labels module callled that will be used for naming and tags.   ss s
 ##-----------------------------------------------------------------------------
+
+
+
 module "labels" {
   source  = "clouddrove/labels/azure"
   version = "1.0.0"
