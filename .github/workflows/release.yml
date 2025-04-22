@@ -6,9 +6,8 @@ on:
 
 jobs:
   release:
-    uses: clouddrove-sandbox/terraform-azure-vnt/.github/workflows/workflow.yml@master
+    uses: clouddrove-sandbox/resource-group-workflow/.github/workflows/workflow.yml@master
     with:
       target_branch: master
     secrets:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GITHUB: ${{ secrets.GITHUB }}  # Add this line
