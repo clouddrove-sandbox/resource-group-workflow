@@ -109,14 +109,16 @@ jobs:
             
             [Compare changes](https://github.com/${{ github.repository }}/compare/${{ steps.get_latest_tag.outputs.latest_tag }}...${{ steps.calc_version.outputs.new_version }})
 
-      - name: Commit and Push Changelog
+      - name: Commit CHANGELOG.md
         if: steps.skip_tag.outputs.skip == 'false'
-        uses: EndBug/add-and-commit@v9
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          add: 'CHANGELOG.md'
-          message: 'docs: update CHANGELOG.md for ${{ steps.calc_version.outputs.new_version }}'
-          committer_name: GitHub Actions
-          committer_email: actions@github.com
+          branch: ${{ inputs.target_branch }}
+          commit_user_name: clouddrove-ci
+          commit_user_email: 84795582+clouddrove-ci@users.noreply.github.com
+          commit_author: CloudDrove CI <84795582+clouddrove-ci@users.noreply.github.com>
+          commit_message: 'docs: update CHANGELOG.md for ${{ steps.calc_version.outputs.new_version }}'
+          file_pattern: CHANGELOG.md
 
       - name: Action Summary
         run: |
