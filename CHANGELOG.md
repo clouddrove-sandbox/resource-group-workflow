@@ -5,6 +5,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [v4.5.0] - 2025-04-22
+### :boom: BREAKING CHANGES
+- due to [`129d4ab`](https://github.com/clouddrove-sandbox/resource-group-workflow/commit/129d4ab8fe3240ee2f3fea3f2df983ead2463b2a) - test *(commit by [@vedkops](https://github.com/vedkops))*:
+
+  test
+
+
+### :sparkles: New Features
+- [`129d4ab`](https://github.com/clouddrove-sandbox/resource-group-workflow/commit/129d4ab8fe3240ee2f3fea3f2df983ead2463b2a) - test *(commit by [@vedkops](https://github.com/vedkops))*
+
+
 ## [v4.4.0] - 2025-04-22
 ### :bug: Bug Fixes
 - [`1253280`](https://github.com/clouddrove-sandbox/resource-group-workflow/commit/1253280d258e36de655a290efb72d6fd4fa0b151) - Update main.tf *(commit by [@vedkops](https://github.com/vedkops))*
@@ -34,3 +45,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.0.2]: https://github.com/clouddrove/terraform-azure-resource-group/compare/1.0.1...1.0.2
 [v4.2.0]: https://github.com/clouddrove-sandbox/resource-group-workflow/compare/v4.1.0...v4.2.0
 [v4.4.0]: https://github.com/clouddrove-sandbox/resource-group-workflow/compare/v4.3.0...v4.4.0
+[v4.5.0]: https://github.com/clouddrove-sandbox/resource-group-workflow/compare/v4.4.0...v4.5.0
