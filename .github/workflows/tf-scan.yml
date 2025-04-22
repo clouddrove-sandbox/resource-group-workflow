@@ -1,0 +1,87 @@
+name: 'Checkov Terraform Security Scan'
+
+on:
+  pull_request:
+    branches: [ "*" ]
+    paths:
+      - '**.tf'
+
+jobs:
+  checkov-scan:
+    name: 'Checkov Security Scan'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Run Checkov Scan
+        id: checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: terraform
+          soft_fail: true
+          output_format: cli
+          download_external_modules: true
+
+      - name: Format Checkov Output
+        id: format_output
+        if: always()
+        run: |
+          CHECKOV_OUTPUT=$(cat ${{ github.workspace }}/results.txt || echo "No results found")
+          # Extract failed checks and format them for the comment
+          FAILED_CHECKS=$(echo "$CHECKOV_OUTPUT" | grep -A 2 "Check.*FAILED" || echo "No failed checks")
+          echo "FAILED_CHECKS<<EOF" >> $GITHUB_ENV
+          echo "$FAILED_CHECKS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          
+          # Count total checks and failed checks
+          TOTAL_CHECKS=$(echo "$CHECKOV_OUTPUT" | grep -c "Check" || echo 0)
+          FAILED_COUNT=$(echo "$CHECKOV_OUTPUT" | grep -c "Check.*FAILED" || echo 0)
+          PASSED_COUNT=$((TOTAL_CHECKS - FAILED_COUNT))
+          echo "TOTAL_CHECKS=$TOTAL_CHECKS" >> $GITHUB_ENV
+          echo "FAILED_COUNT=$FAILED_COUNT" >> $GITHUB_ENV
+          echo "PASSED_COUNT=$PASSED_COUNT" >> $GITHUB_ENV
+
+      - name: Comment PR with Checkov Results
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const totalChecks = process.env.TOTAL_CHECKS;
+            const failedCount = process.env.FAILED_COUNT;
+            const passedCount = process.env.PASSED_COUNT;
+            const failedChecks = process.env.FAILED_CHECKS;
+            
+            let status = '✅ All checks passed!';
+            let details = '';
+            
+            if (parseInt(failedCount) > 0) {
+              status = '❌ Some checks failed';
+              details = `\n\n### Failed Checks:\n\`\`\`\n${failedChecks}\n\`\`\`\n\nPlease review and fix these issues before merging.`;
+            }
+            
+            const comment = `## Checkov Terraform Security Scan Results
+            
+            ${status}
+            
+            **Summary:**
+            - Total checks: ${totalChecks}
+            - Passed: ${passedCount}
+            - Failed: ${failedCount}
+            ${details}
+            
+            [Checkov Documentation](https://www.checkov.io/5.Policy%20Index/terraform.html)
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
