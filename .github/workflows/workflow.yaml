@@ -90,11 +90,13 @@ jobs:
         with:
           token: ${{ secrets.GH_TOKEN }}
           tag: ${{ steps.calc_version.outputs.new_version }}
-          fromTag: ${{ steps.get_latest_tag.outputs.latest_tag }}
           includeInvalidCommits: true
-          excludeTypes: ""
           writeToFile: true
-          
+          changelogFilePath: CHANGELOG.md
+          includeRefIssues: true
+          useGitmojis: true
+          reverseOrder: false
+
       - name: Create Release
         if: steps.skip_tag.outputs.skip == 'false'
         uses: ncipollo/release-action@v1
