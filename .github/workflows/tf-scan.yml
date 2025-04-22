@@ -1,77 +1,122 @@
-name: 'Checkov Terraform Security Scan'
+name: Security Scan
 
 on:
   pull_request:
-    branches: [ "*" ]
-    paths:
-      - '**.tf'
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      directory:
+        required: true
+        type: string
+        default: '.'
+      continue_on_error:
+        required: true
+        type: string
+        default: 'true'
+      var_file:
+        required: false
+        type: string
 
 jobs:
-  checkov-scan:
-    name: 'Checkov Security Scan'
-    runs-on: ubuntu-latest
+  scan:
     permissions:
       contents: read
-      pull-requests: write
       security-events: write
-    
+      actions: read
+      pull-requests: write
+
+    runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-      
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          terraform_version: '1.5.0'
-      
-      - name: Run Checkov Scan
+          python-version: '3.8'
+
+      - name: Cache Checkov
+        uses: actions/cache@v3
+        with:
+          path: ~/.checkov
+          key: ${{ runner.os }}-checkov-${{ hashFiles('**/*.tf') }}
+          restore-keys: |
+            ${{ runner.os }}-checkov-
+
+      - name: Run Checkov scan
         id: checkov
-        uses: bridgecrewio/checkov-action@master
+        uses: bridgecrewio/checkov-action@v12
         with:
-          directory: .
-          framework: terraform
-          soft_fail: true
-          output_format: cli
-          download_external_modules: true
-      
-      - name: Process Checkov Output
-        id: process_output
-        if: always()
+          directory: ${{ inputs.directory }}
+          output_format: cli,sarif
+          soft_fail: ${{ inputs.continue_on_error }}
+          download_external_modules: false
+          output_file_path: console,checkov-results.sarif
+
+      - name: Process Checkov Output for PR Comment
+        id: process_checkov
+        if: github.event_name == 'pull_request'
         run: |
-          # Store Checkov output in a variable
-          CHECKOV_OUTPUT="${{ steps.checkov.outputs.results }}"
+          # Extract summary from Checkov results
+          SUMMARY=$(grep -A 1 "terraform scan results:" checkov-results.sarif || echo "No summary found")
           
-          # Extract failed checks with proper context
-          FAILED_CHECKS=$(echo "$CHECKOV_OUTPUT" | grep -A 5 "Check.*FAILED" || echo "No failed checks")
+          # Extract failed checks with context
+          FAILED_CHECKS=$(grep -A 10 "FAILED" checkov-results.sarif | grep -v "PASSED" || echo "No failed checks found")
           
           # Count checks
-          TOTAL_CHECKS=$(echo "$CHECKOV_OUTPUT" | grep -c "Check:" || echo 0)
-          FAILED_COUNT=$(echo "$CHECKOV_OUTPUT" | grep -c "Check.*FAILED" || echo 0)
-          
-          # Ensure variables are treated as integers
-          TOTAL_CHECKS=$(($TOTAL_CHECKS + 0))
-          FAILED_COUNT=$(($FAILED_COUNT + 0))
-          PASSED_COUNT=$(($TOTAL_CHECKS - $FAILED_COUNT))
+          PASSED_COUNT=$(echo "$SUMMARY" | grep -o "Passed checks: [0-9]*" | grep -o "[0-9]*" || echo "0")
+          FAILED_COUNT=$(echo "$SUMMARY" | grep -o "Failed checks: [0-9]*" | grep -o "[0-9]*" || echo "0")
+          SKIPPED_COUNT=$(echo "$SUMMARY" | grep -o "Skipped checks: [0-9]*" | grep -o "[0-9]*" || echo "0")
           
           # Create multiline output
           echo "failed_checks<<EOF" >> $GITHUB_OUTPUT
           echo "$FAILED_CHECKS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           
-          echo "total_checks=$TOTAL_CHECKS" >> $GITHUB_OUTPUT
-          echo "failed_count=$FAILED_COUNT" >> $GITHUB_OUTPUT
           echo "passed_count=$PASSED_COUNT" >> $GITHUB_OUTPUT
-      
-      - name: Comment PR with Checkov Results
-        if: always()
+          echo "failed_count=$FAILED_COUNT" >> $GITHUB_OUTPUT
+          echo "skipped_count=$SKIPPED_COUNT" >> $GITHUB_OUTPUT
+          
+          # Create a summary for the PR comment
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Checkov SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        if: success() || failure()
+        with:
+          sarif_file: checkov-results.sarif
+          category: checkov
+
+      - name: Upload Trivy SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        if: success() || failure()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+      - name: Comment PR with Security Scan Results
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const totalChecks = ${{ steps.process_output.outputs.total_checks || 0 }};
-            const failedCount = ${{ steps.process_output.outputs.failed_count || 0 }};
-            const passedCount = ${{ steps.process_output.outputs.passed_count || 0 }};
-            const failedChecks = `${{ steps.process_output.outputs.failed_checks || '' }}`;
+            const passedCount = '${{ steps.process_checkov.outputs.passed_count }}';
+            const failedCount = '${{ steps.process_checkov.outputs.failed_count }}';
+            const skippedCount = '${{ steps.process_checkov.outputs.skipped_count }}';
+            const failedChecks = `${{ steps.process_checkov.outputs.failed_checks }}`;
+            const summary = `${{ steps.process_checkov.outputs.summary }}`;
             
             let status = '✅ All security checks passed!';
             let details = '';
@@ -81,17 +126,17 @@ jobs:
               details = `\n\n### Failed Checks:\n\`\`\`\n${failedChecks}\n\`\`\`\n\nPlease review and fix these security issues before merging.`;
             }
             
-            const comment = `## Checkov Terraform Security Scan Results
+            const comment = `## Terraform Security Scan Results
             
             ${status}
             
             **Summary:**
-            - Total checks: ${totalChecks}
-            - Passed: ${passedCount}
-            - Failed: ${failedCount}
+            - Passed checks: ${passedCount}
+            - Failed checks: ${failedCount}
+            - Skipped checks: ${skippedCount}
             ${details}
             
-            [Checkov Documentation](https://www.checkov.io/5.Policy%20Index/terraform.html)
+            _Security scan results are also available in the Security tab._
             `;
             
             github.rest.issues.createComment({
