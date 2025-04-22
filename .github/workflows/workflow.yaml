@@ -83,7 +83,19 @@ jobs:
           git tag ${{ steps.calc_version.outputs.new_version }}
           git push https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }} ${{ steps.calc_version.outputs.new_version }}
 
-      - name: Create Release with Compare Link Only
+      - name: Generate Changelog
+        if: steps.skip_tag.outputs.skip == 'false'
+        id: changelog
+        uses: requarks/changelog-action@v1
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          tag: ${{ steps.calc_version.outputs.new_version }}
+          fromTag: ${{ steps.get_latest_tag.outputs.latest_tag }}
+          includeInvalidCommits: true
+          excludeTypes: ""
+          writeToFile: true
+          
+      - name: Create Release
         if: steps.skip_tag.outputs.skip == 'false'
         uses: ncipollo/release-action@v1
         with:
@@ -91,7 +103,18 @@ jobs:
           tag: ${{ steps.calc_version.outputs.new_version }}
           name: ${{ steps.calc_version.outputs.new_version }}
           body: |
-            https://github.com/${{ github.repository }}/compare/${{ steps.get_latest_tag.outputs.latest_tag }}...${{ steps.calc_version.outputs.new_version }}
+            ${{ steps.changelog.outputs.changes }}
+            
+            [Compare changes](https://github.com/${{ github.repository }}/compare/${{ steps.get_latest_tag.outputs.latest_tag }}...${{ steps.calc_version.outputs.new_version }})
+
+      - name: Commit and Push Changelog
+        if: steps.skip_tag.outputs.skip == 'false'
+        uses: EndBug/add-and-commit@v9
+        with:
+          add: 'CHANGELOG.md'
+          message: 'docs: update CHANGELOG.md for ${{ steps.calc_version.outputs.new_version }}'
+          committer_name: GitHub Actions
+          committer_email: actions@github.com
 
       - name: Action Summary
         run: |
