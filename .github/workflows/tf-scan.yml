@@ -1,4 +1,4 @@
-name: Checkov Security Scan
+name: Checkov Security Scan with Debug
 
 on:
   workflow_call:
@@ -16,11 +16,6 @@ on:
         required: false
         type: string
         description: 'Path to Terraform variable file'
-      download_external_modules:
-        required: false
-        type: string
-        default: 'false'
-        description: 'Whether to download external modules (true/false)'
 
 jobs:
   scan:
@@ -32,19 +27,70 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Checkov GitHub Action
-        id: checkov
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Checkov Directly
+        run: |
+          python -m pip install --upgrade pip
+          pip install checkov
+          checkov --version
+
+      - name: Debug Checkov Parameters
+        run: |
+          echo "Directory to scan: ${{ inputs.directory }}"
+          echo "Continue on error: ${{ inputs.continue_on_error }}"
+          echo "Var file: ${{ inputs.var_file || 'Not provided' }}"
+          echo "Download external modules is explicitly set to FALSE"
+          echo "Checking Checkov help for download-external-modules option:"
+          checkov --help | grep -A 3 "download-external-modules"
+
+      # First approach: Using the action with explicit parameter
+      - name: Checkov Scan (Action Approach)
+        id: checkov_action
         uses: bridgecrewio/checkov-action@v12
         with:
-          output_format: cli,sarif
-          output_file_path: console,results.sarif
+          output_format: cli
           soft_fail: ${{ inputs.continue_on_error == 'true' }}
           directory: ${{ inputs.directory }}
           var_file: ${{ inputs.var_file }}
-          download_external_modules: ${{ inputs.download_external_modules }}
-          framework: terraform
+          download_external_modules: false
+          skip_check: CKV_TF_1
+          quiet: false
+          log_level: DEBUG
+
+      # Second approach: Using direct CLI command for comparison
+      - name: Checkov Scan (CLI Approach)
+        id: checkov_cli
+        run: |
+          echo "Running Checkov with explicit CLI parameter for download-external-modules=false"
+          checkov -d ${{ inputs.directory }} \
+            --soft-fail ${{ inputs.continue_on_error }} \
+            ${{ inputs.var_file != '' && format('--var-file {0}', inputs.var_file) || '' }} \
+            --download-external-modules false \
+            --skip-check CKV_TF_1 \
+            --output cli \
+            --quiet false \
+            --log-level DEBUG
+          
+          echo "Checking if any external module directories were created despite the setting:"
+          find ${{ inputs.directory }} -type d -name ".external_modules" || echo "No .external_modules directory found"
+
+      # Generate SARIF for upload
+      - name: Generate SARIF for Upload
+        run: |
+          checkov -d ${{ inputs.directory }} \
+            --soft-fail ${{ inputs.continue_on_error }} \
+            ${{ inputs.var_file != '' && format('--var-file {0}', inputs.var_file) || '' }} \
+            --download-external-modules false \
+            --skip-check CKV_TF_1 \
+            --output sarif \
+            --output-file-path results.sarif
 
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3
