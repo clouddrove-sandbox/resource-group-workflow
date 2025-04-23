@@ -17,13 +17,14 @@ on:
         type: string
         description: 'Path to Terraform variable file'
 
+# Add top-level permissions to fix CKV2_GHA_1
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
 jobs:
   scan:
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
-
     runs-on: ubuntu-latest
 
     steps:
@@ -69,13 +70,14 @@ jobs:
         id: checkov_cli
         run: |
           echo "Running Checkov with explicit CLI parameter for download-external-modules=false"
+          # Fix the CLI command syntax
           checkov -d ${{ inputs.directory }} \
-            --soft-fail ${{ inputs.continue_on_error }} \
+            --soft-fail \
             ${{ inputs.var_file != '' && format('--var-file {0}', inputs.var_file) || '' }} \
             --download-external-modules false \
             --skip-check CKV_TF_1 \
             --output cli \
-            --quiet false \
+            --quiet \
             --log-level DEBUG
           
           echo "Checking if any external module directories were created despite the setting:"
@@ -85,7 +87,7 @@ jobs:
       - name: Generate SARIF for Upload
         run: |
           checkov -d ${{ inputs.directory }} \
-            --soft-fail ${{ inputs.continue_on_error }} \
+            --soft-fail \
             ${{ inputs.var_file != '' && format('--var-file {0}', inputs.var_file) || '' }} \
             --download-external-modules false \
             --skip-check CKV_TF_1 \
