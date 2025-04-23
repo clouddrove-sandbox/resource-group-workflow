@@ -1,5 +1,5 @@
 ##-----------------------------------------------------------------------------7
-## Labels module callled that will be used for naming and tags.  ff ss sdddfff677676776776776h7h655ujjkuykyukkkkukukkkukky
+## Labels module callled that will be used for naming and tags
 ##-----------------------------------------------------------------------------
 
 
