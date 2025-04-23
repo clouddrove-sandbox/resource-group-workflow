@@ -39,15 +39,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-          cache: 'pip'
-
-      - name: Cache Checkov
-        uses: actions/cache@v3
-        with:
-          path: ~/.checkov
-          key: ${{ runner.os }}-checkov-${{ hashFiles('**/*.tf') }}
-          restore-keys: |
-            ${{ runner.os }}-checkov-
+          # Removed cache to fix the requirements.txt error
 
       - name: Install Checkov
         run: |
@@ -59,19 +51,30 @@ jobs:
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: ${{ github.event.inputs.directory || '.' }}
+          output_format: sarif
+          output_file: checkov-results.sarif
+          soft_fail: ${{ github.event.inputs.continue_on_error || true }}
+          download_external_modules: false
+          framework: terraform
+          quiet: false
+
+      - name: Run Checkov Scan for CLI Output
+        id: checkov_cli
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: ${{ github.event.inputs.directory || '.' }}
           output_format: cli
           soft_fail: ${{ github.event.inputs.continue_on_error || true }}
           download_external_modules: false
           framework: terraform
           quiet: false
-          skip_check: CKV_TF_1 # Optional: Skip specific checks if needed
 
       - name: Format Checkov Results for PR Comment
         id: format_results
         if: github.event_name == 'pull_request'
         run: |
           # Store Checkov output in a variable
-          CHECKOV_OUTPUT="${{ steps.checkov.outputs.results }}"
+          CHECKOV_OUTPUT="${{ steps.checkov_cli.outputs.results }}"
           
           # Extract summary statistics
           SUMMARY=$(echo "$CHECKOV_OUTPUT" | grep -A 1 "terraform scan results:" || echo "No summary found")
@@ -138,7 +141,7 @@ jobs:
 
       - name: Upload SARIF file
         if: success() || failure()
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: results.sarif
+          sarif_file: checkov-results.sarif
           category: checkov
