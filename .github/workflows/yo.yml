@@ -13,4 +13,3 @@ jobs:
     with:
       directory: '.'
       continue_on_error: 'true'
-      download_external_modules: 'false'
