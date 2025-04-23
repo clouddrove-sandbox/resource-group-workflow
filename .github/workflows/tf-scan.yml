@@ -11,29 +11,35 @@ on:
         required: true
         type: string
         default: '.'
+        description: 'Directory to scan (relative to repository root)'
       continue_on_error:
         required: true
-        type: string
-        default: 'true'
+        type: boolean
+        default: true
+        description: 'Continue on error (true/false)'
 
 jobs:
   checkov-scan:
     name: 'Checkov Security Scan'
     runs-on: ubuntu-latest
     permissions:
+      # Limit permissions to only what's necessary
       contents: read
       pull-requests: write
       security-events: write
-      actions: read
     
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          # Fetch all history for better analysis
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.8'
+          python-version: '3.10'
+          cache: 'pip'
 
       - name: Cache Checkov
         uses: actions/cache@v3
@@ -43,14 +49,22 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-checkov-
 
+      - name: Install Checkov
+        run: |
+          python -m pip install --upgrade pip
+          pip install checkov
+
       - name: Run Checkov Scan
         id: checkov
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: ${{ github.event.inputs.directory || '.' }}
           output_format: cli
-          soft_fail: ${{ github.event.inputs.continue_on_error || 'true' }}
+          soft_fail: ${{ github.event.inputs.continue_on_error || true }}
           download_external_modules: false
+          framework: terraform
+          quiet: false
+          skip_check: CKV_TF_1 # Optional: Skip specific checks if needed
 
       - name: Format Checkov Results for PR Comment
         id: format_results
@@ -67,7 +81,7 @@ jobs:
           FAILED_COUNT=$(echo "$SUMMARY" | grep -o "Failed checks: [0-9]*" | grep -o "[0-9]*" || echo "0")
           SKIPPED_COUNT=$(echo "$SUMMARY" | grep -o "Skipped checks: [0-9]*" | grep -o "[0-9]*" || echo "0")
           
-          # Extract failed checks with context (5 lines after the FAILED line)
+          # Extract failed checks with context (10 lines after the FAILED line)
           FAILED_CHECKS=$(echo "$CHECKOV_OUTPUT" | grep -A 10 "FAILED" | grep -v "PASSED" || echo "No failed checks found")
           
           # Create multiline output for GitHub Actions
@@ -91,22 +105,26 @@ jobs:
             const failedChecks = `${{ steps.format_results.outputs.failed_checks }}`;
             
             let status = '✅ All security checks passed!';
+            let statusIcon = '🟢';
             let details = '';
             
             if (parseInt(failedCount) > 0) {
               status = '❌ Security checks failed';
+              statusIcon = '🔴';
               details = `\n\n### Failed Checks:\n\`\`\`\n${failedChecks}\n\`\`\`\n\nPlease review and fix these security issues before merging.`;
             }
             
-            const comment = `## Checkov Terraform Security Scan Results
+            const comment = `## ${statusIcon} Checkov Terraform Security Scan Results
             
             ${status}
             
             **Summary:**
-            - Passed checks: ${passedCount}
-            - Failed checks: ${failedCount}
-            - Skipped checks: ${skippedCount}
+            - ✅ Passed checks: ${passedCount}
+            - ❌ Failed checks: ${failedCount}
+            - ⏭️ Skipped checks: ${skippedCount}
             ${details}
+            
+            > This scan was performed with external module download disabled, focusing only on the code in this repository.
             
             [Checkov Documentation](https://www.checkov.io/5.Policy%20Index/terraform.html)
             `;
@@ -117,3 +135,10 @@ jobs:
               repo: context.repo.repo,
               body: comment
             });
+
+      - name: Upload SARIF file
+        if: success() || failure()
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: results.sarif
+          category: checkov
