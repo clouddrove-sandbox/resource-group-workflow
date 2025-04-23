@@ -17,7 +17,7 @@ on:
         type: string
         description: 'Path to Terraform variable file'
 
-# Add top-level permissions to fix CKV2_GHA_1
+# Proper permissions following principle of least privilege
 permissions:
   contents: read
   security-events: write
@@ -48,52 +48,36 @@ jobs:
           echo "Continue on error: ${{ inputs.continue_on_error }}"
           echo "Var file: ${{ inputs.var_file || 'Not provided' }}"
           echo "Download external modules is explicitly set to FALSE"
-          echo "Checking Checkov help for download-external-modules option:"
-          checkov --help | grep -A 3 "download-external-modules"
 
-      # First approach: Using the action with explicit parameter
-      - name: Checkov Scan (Action Approach)
-        id: checkov_action
+      # Using the Checkov action with both CLI and SARIF output formats
+      - name: Checkov Scan
+        id: checkov
         uses: bridgecrewio/checkov-action@v12
         with:
-          output_format: cli
-          soft_fail: ${{ inputs.continue_on_error == 'true' }}
           directory: ${{ inputs.directory }}
+          soft_fail: ${{ inputs.continue_on_error == 'true' }}
           var_file: ${{ inputs.var_file }}
           download_external_modules: false
           skip_check: CKV_TF_1
-          quiet: false
+          output_format: cli,sarif
+          output_file_path: console,results.sarif
           log_level: DEBUG
 
-      # Second approach: Using direct CLI command for comparison
-      - name: Checkov Scan (CLI Approach)
-        id: checkov_cli
+      # Debug step to verify SARIF file existence
+      - name: Debug SARIF file
+        if: success() || failure()
         run: |
-          echo "Running Checkov with explicit CLI parameter for download-external-modules=false"
-          # Fix the CLI command syntax
-          checkov -d ${{ inputs.directory }} \
-            --soft-fail \
-            ${{ inputs.var_file != '' && format('--var-file {0}', inputs.var_file) || '' }} \
-            --download-external-modules false \
-            --skip-check CKV_TF_1 \
-            --output cli \
-            --quiet \
-            --log-level DEBUG
-          
-          echo "Checking if any external module directories were created despite the setting:"
-          find ${{ inputs.directory }} -type d -name ".external_modules" || echo "No .external_modules directory found"
+          ls -la
+          if [ -f "results.sarif" ]; then
+            echo "SARIF file exists"
+            head -n 20 results.sarif
+          else
+            echo "SARIF file does not exist"
+            echo "Current directory contents:"
+            ls -la
+          fi
 
-      # Generate SARIF for upload
-      - name: Generate SARIF for Upload
-        run: |
-          checkov -d ${{ inputs.directory }} \
-            --soft-fail \
-            ${{ inputs.var_file != '' && format('--var-file {0}', inputs.var_file) || '' }} \
-            --download-external-modules false \
-            --skip-check CKV_TF_1 \
-            --output sarif \
-            --output-file-path results.sarif
-
+      # Upload SARIF file to GitHub Security tab
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3
         if: success() || failure()
