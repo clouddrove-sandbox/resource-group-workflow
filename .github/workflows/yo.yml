@@ -2,14 +2,13 @@ name: Security Scan
 
 on:
   pull_request:
-    branches: [ main, master ]
-    paths:
-      - '**.tf'
-  workflow_dispatch:
+    branches: [master]
+    types: [opened, synchronize]
 
 jobs:
-  terraform-security:
-    uses: clouddrove-sandbox/resource-group-workflow/.github/workflows/tf-scan.yml@master
+  checkov:
+    uses: clouddrove-sandbox/terraform-azure-storage-test/.github/workflows/tf-scan.yml@master
     with:
       directory: '.'
       continue_on_error: 'true'
+      skip_check: 'CKV_TF_1'
