@@ -7,7 +7,7 @@ on:
 
 jobs:
   checkov:
-    uses: clouddrove-sandbox/terraform-azure-storage-test/.github/workflows/tf-scan.yml@master
+    uses: clouddrove-sandbox/resource-group-workflow/.github/workflows/tf-scan.yml@master
     with:
       directory: '.'
       continue_on_error: 'true'
