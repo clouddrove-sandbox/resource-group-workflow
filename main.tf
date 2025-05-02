@@ -1,5 +1,5 @@
 ##-----------------------------------------------------------------------------7
-## Labels module callled that will be used for naming and tags
+## Labels module callled that will be used for naming and tafgs
 ##-----------------------------------------------------------------------------
 
 
