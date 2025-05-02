@@ -58,7 +58,7 @@ jobs:
 
       - name: Comment on PR with Checkov results
         if: github.event_name == 'pull_request'
-        uses: vedkops/checckov-commter@v1.2
+        uses: clouddrove/checkov-sarif-view@v0.0.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           sarif_file: results.sarif
