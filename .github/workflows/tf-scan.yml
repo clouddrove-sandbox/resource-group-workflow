@@ -17,7 +17,6 @@ on:
         required: false
         type: string
         default: ''  
-      
 
 permissions:
   contents: read
@@ -33,49 +32,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Cache Checkov
-        uses: actions/cache@v3
-        with:
-          path: ~/.checkov
-          key: ${{ runner.os }}-checkov-${{ hashFiles('**/*.tf') }}
-          restore-keys: |
-            ${{ runner.os }}-checkov-
-
-      - name: Install Checkov
-        run: |
-          pip install --upgrade pip
-          pip install checkov
-
       - name: Cleanup Old SARIF
         run: rm -f results.sarif || true
 
-      - name: Run Checkov
+      - name: Run Checkov (Docker-based)
         id: checkov
         continue-on-error: true
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: ${{ inputs.directory }}
           framework: terraform
-          soft_fail: true
+          soft_fail: ${{ inputs.continue_on_error == 'true' }}
           var_file: ${{ inputs.var_file }}
           download_external_modules: false
           skip_check: ${{ inputs.skip_check }}
           output_format: cli,sarif
           output_file_path: console,results.sarif
 
-      - name: Upload SARIF
+      - name: Upload SARIF to GitHub Security
         if: always() && !cancelled()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: results.sarif
           category: checkov
 
-      - name: Comment on PR
+      - name: Comment on PR with Checkov results
         if: github.event_name == 'pull_request'
         uses: vedkops/checckov-commter@v1.2
         with:
